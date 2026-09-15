@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#CC0033">
 <title>Multisys Cards</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <style>
   :root{
@@ -226,23 +226,41 @@ async function cardToPng(c, qrText) {
   const W = 1050, H = 600, fs = W / 100, pad = fs * 6;
   const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
   const x = cv.getContext("2d");
-  try { await document.fonts.load("800 10px Manrope"); await document.fonts.load("600 10px Manrope"); } catch {}
+  try { await Promise.all([400, 600, 800].map(w => document.fonts.load(`${w} ${fs * 7.2}px Manrope`))); } catch {}
   const font = (w, s) => `${w} ${s}px Manrope, system-ui, sans-serif`;
+  /* canvas has no CSS letter-spacing, so .name's -.02em has to be applied here too,
+     natively where supported and per-character where it is not, or measureText comes
+     out ~20px wide at card size and fit() clips a name the DOM renders in full. */
+  let track = 0;
+  const setFont = (w, s, em = 0) => {
+    x.font = font(w, s); track = 0;
+    if ("letterSpacing" in x) x.letterSpacing = `${em}em`; else track = em * s;
+  };
+  const textW = (t) => x.measureText(t).width + track * t.length;
+  const draw = (t, px, py) => {
+    if (!track) return x.fillText(t, px, py);
+    let cx = px;
+    for (const ch of t) { x.fillText(ch, cx, py); cx += x.measureText(ch).width + track; }
+  };
   x.fillStyle = "#fff"; x.fillRect(0, 0, W, H);
   const logo = new Image(); logo.src = COMPANY.logo.match(/src="([^"]+)"/)[1];
   await new Promise(r => { logo.onload = r; logo.onerror = r; });
   const lh = fs * 8, lw = logo.naturalWidth ? lh * logo.naturalWidth / logo.naturalHeight : 0;
   if (lw) x.drawImage(logo, pad, pad, lw, lh);
   const qrSize = fs * 26, qx = W - pad - qrSize, qy = H - pad - qrSize, maxW = qx - pad - fs * 5;
-  const fit = (t, w) => { while (x.measureText(t).width > w && t.length > 1) t = t.slice(0, -2) + "…"; return t; };
+  const fit = (t, w) => {
+    if (textW(t) <= w) return t;
+    while (t.length > 1 && textW(t + "…") > w) t = t.slice(0, -1);
+    return t + "…";
+  };
   const lines = [c.phone, c.email, c.website].filter(Boolean);
   const lineH = fs * 2.9 * 1.5;
   let y = H - pad - lines.length * lineH + lineH * 0.7;
-  x.fillStyle = "#6E6E6E"; x.font = font(500, fs * 2.9);
-  lines.forEach((t, i) => x.fillText(fit(t, maxW), pad, y + i * lineH));
+  x.fillStyle = "#6E6E6E"; setFont(400, fs * 2.9);
+  lines.forEach((t, i) => draw(fit(t, maxW), pad, y + i * lineH));
   y = H - pad - lines.length * lineH - fs * 3;
-  x.fillStyle = "#CC0033"; x.font = font(600, fs * 3.4); x.fillText(fit(c.title || "", maxW), pad, y);
-  x.fillStyle = "#2A2A2A"; x.font = font(800, fs * 7.2); x.fillText(fit(c.name, maxW), pad, y - fs * 4.4);
+  x.fillStyle = "#CC0033"; setFont(600, fs * 3.4); draw(fit(c.title || "", maxW), pad, y);
+  x.fillStyle = "#2A2A2A"; setFont(800, fs * 7.2, -0.02); draw(fit(c.name, maxW), pad, y - fs * 4.4);
   const qr = qrcode(0, "M"); qr.addData(qrText); qr.make();
   const n = qr.getModuleCount(), cell = qrSize / n;
   x.fillStyle = "#000";
