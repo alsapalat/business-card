@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#CC0033">
+<script>/* the scan link opens on black; set it before first paint */
+if (/^#\/card\?d=/.test(location.hash)) document.documentElement.className = "boot-scan";</script>
 <title>Multisys Cards</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -24,13 +26,15 @@
     --fs:calc(var(--cw) / 100);       /* card font unit */
   }
   *{box-sizing:border-box}
+  html.boot-scan,html.boot-scan body{background:#0a0a0c}
   html,body{margin:0;background:var(--bg);color:var(--text);font-family:Manrope,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
   body{min-height:100dvh;padding-bottom:env(safe-area-inset-bottom)}
   a{color:inherit}
   button{font:inherit}
 
   /* app chrome */
-  header{position:sticky;top:0;z-index:5;background:var(--bg);display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line)}
+  header{position:sticky;top:0;z-index:5;background:var(--bg);display:none;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line)}
+  body.chrome header{display:flex}
   header h1{font-size:17px;font-weight:800;margin:0;flex:1;letter-spacing:-.01em}
   .btn{border:0;border-radius:10px;padding:10px 14px;font-weight:700;background:var(--ink);color:#fff;cursor:pointer}
   .btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--ink)}
@@ -89,6 +93,155 @@
   }
   @media (prefers-reduced-motion:no-preference){
     .card{transition:transform .35s ease}
+  }
+  /* ---- scan view: the page a QR lands on ----
+     Phases are classes on <body>: scan -> s-scan -> s-lock -> s-reveal -> ready, plus
+     `rotated` once the reader taps the card and `fast` when a tap skips the intro.
+     The card is fixed at 620px and sized purely by transform, so --kUp/--kRot (set in JS,
+     because CSS calc cannot divide a length by a length) can animate between the two
+     orientations without touching layout. */
+  body.scan{--cw:620px;--ch:calc(620px * 4 / 7);--fs:6.2px}
+  body.scan #hdr{display:none}
+  body.scan{overflow:hidden}
+  body.scan main{padding:0}
+
+  /* backdrop: black while scanning, then paper with slow brand-coloured drift */
+  .fx{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;
+    background:#0a0a0c;transition:background-color 1.1s ease}
+  body.scan.s-reveal .fx{background-color:var(--bg)}
+  .sh{position:absolute;will-change:transform}
+  .sh i{display:block;width:100%;height:100%;border-radius:50%;filter:blur(46px);
+    opacity:0;transition:opacity 1.4s ease}
+  body.scan.s-reveal .sh i{opacity:.34}
+  .s1{width:58vw;height:58vw;left:-18vw;top:5vh}   .s1 i{background:var(--red);animation:drift 31s ease-in-out infinite alternate}
+  .s2{width:46vw;height:46vw;right:-14vw;top:24vh} .s2 i{background:var(--orange);animation:drift 38s ease-in-out infinite alternate-reverse}
+  .s3{width:38vw;height:38vw;left:10vw;bottom:6vh} .s3 i{background:var(--bar-y);animation:drift 26s ease-in-out infinite alternate-reverse}
+  .s4{width:30vw;height:30vw;right:2vw;bottom:20vh}.s4 i{background:var(--bar-r);animation:drift 35s ease-in-out infinite alternate}
+  .s5{width:24vw;height:24vw;left:36vw;top:-5vh}   .s5 i{background:var(--bar-o);animation:drift 22s ease-in-out infinite alternate}
+  @keyframes drift{from{transform:translate3d(-3%,-2%,0) scale(1)}to{transform:translate3d(5%,4%,0) scale(1.1)}}
+
+  /* viewfinder: quiet. Hairline brackets, one pale sweep, no glow. */
+  .vf{position:fixed;inset:0;z-index:3;display:grid;place-items:center;
+    opacity:0;transition:opacity .5s ease;pointer-events:none}
+  body.scan.s-scan .vf{opacity:1}
+  body.scan.s-reveal .vfbox .c,body.scan.s-reveal .laser,body.scan.s-reveal .vftext{
+    opacity:0;transition:opacity .3s ease}
+  body.scan.qr-landed .vf{opacity:0;transition:opacity .2s ease}
+  /* the card's own code only appears once the flying one has arrived on top of it */
+  body.scan .card .qr{opacity:0}
+  body.scan.qr-landed .card .qr{opacity:1;transition:opacity .2s ease}
+  .vfbox{position:relative;width:min(44vw,176px);aspect-ratio:1;display:grid;place-items:center}
+  .vfqr{width:72%;background:#fff;padding:7px;border-radius:8px;opacity:.82;
+    transition:opacity .4s ease}
+  body.scan.s-lock .vfqr{opacity:1}
+  .vfqr svg{width:100%;height:100%;display:block}
+  .vfbox .c{position:absolute;width:19px;height:19px;border:1.5px solid rgba(255,255,255,.34);
+    transition:transform .5s cubic-bezier(.22,1.08,.36,1),border-color .4s ease}
+  .c.tl{top:0;left:0;border-right:0;border-bottom:0;transform:translate(-7px,-7px)}
+  .c.tr{top:0;right:0;border-left:0;border-bottom:0;transform:translate(7px,-7px)}
+  .c.bl{bottom:0;left:0;border-right:0;border-top:0;transform:translate(-7px,7px)}
+  .c.br{bottom:0;right:0;border-left:0;border-top:0;transform:translate(7px,7px)}
+  body.scan.s-lock .vfbox .c{transform:none;border-color:rgba(255,255,255,.72)}
+  .laser{position:absolute;left:2%;right:2%;height:1px;
+    background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent);
+    animation:sweep 1.9s cubic-bezier(.45,0,.55,1) infinite}
+  body.scan.s-lock .laser{animation:none;opacity:0;transition:opacity .3s ease}
+  @keyframes sweep{0%,100%{top:6%}50%{top:90%}}
+  .vftext{position:absolute;left:0;right:0;top:calc(50% + min(22vw,88px) + 30px);
+    margin:0;display:grid;place-items:center;font-size:10px;font-weight:700;
+    letter-spacing:.22em;text-transform:uppercase;color:rgba(255,255,255,.34)}
+  .vftext span{grid-area:1/1;white-space:nowrap;transition:opacity .35s ease}
+  .vftext .t2{opacity:0;color:rgba(255,255,255,.6)}
+  body.scan.s-lock .vftext .t1{opacity:0}
+  body.scan.s-lock .vftext .t2{opacity:1}
+
+  /* the card: upright by default, tap rotates it to full size */
+  body.scan .stage{position:fixed;inset:0;z-index:1;min-height:0;padding:0;
+    display:block;overflow:hidden}
+  body.scan .rotor{position:absolute;inset:0;width:auto;height:auto;
+    opacity:0;transform-origin:50% 50%}
+  body.scan .card{position:absolute;left:50%;top:50%;transform-origin:50% 50%;
+    transform:translate(-50%,-50%) scale(var(--kUp,.56));
+    transition:transform .62s cubic-bezier(.3,1.05,.4,1)}
+  body.scan.rotated .card{transform:translate(-50%,-50%) rotate(90deg) scale(var(--kRot,.95))}
+  body.scan.s-reveal .rotor{animation:cardTurn .72s cubic-bezier(.2,.88,.3,1) .18s both}
+  body.scan.s-reveal .card .logo,body.scan.s-reveal .card .name,body.scan.s-reveal .card .title,
+  body.scan.s-reveal .card .contact div{animation:riseIn .5s ease-out both}
+  body.scan.s-reveal .card .logo{animation-delay:.62s}
+  body.scan.s-reveal .card .name{animation-delay:.70s}
+  body.scan.s-reveal .card .title{animation-delay:.77s}
+  body.scan.s-reveal .card .contact div:nth-child(1){animation-delay:.83s}
+  body.scan.s-reveal .card .contact div:nth-child(2){animation-delay:.88s}
+  body.scan.s-reveal .card .contact div:nth-child(3){animation-delay:.93s}
+  @keyframes cardTurn{
+    from{opacity:0;transform:perspective(1200px) rotateY(-82deg) rotateX(6deg) scale(.46)}
+    45%{opacity:1}
+    to{opacity:1;transform:perspective(1200px) rotateY(0) rotateX(0) scale(1)}
+  }
+  @keyframes riseIn{from{opacity:0;transform:translateY(calc(var(--fs) * 2.2))}to{opacity:1;transform:none}}
+
+  /* tap affordance, shown once the card has landed and retired after the first rotate */
+  .turn{margin:0 0 10px;text-align:center;font-size:10px;font-weight:700;
+    letter-spacing:.2em;text-transform:uppercase;color:var(--muted);
+    opacity:0;transition:opacity .5s ease}
+  body.scan.ready .turn{opacity:.5}
+  body.scan.rotated .turn{opacity:0}
+
+  body.scan .dock{z-index:4;flex-direction:column;align-items:center;gap:0;
+    background:linear-gradient(to top,var(--bg) 58%,transparent);
+    transform:translateY(130%);opacity:0;pointer-events:none;
+    transition:transform .5s cubic-bezier(.22,1.08,.36,1),opacity .35s ease}
+  body.scan.ready .dock{transform:none;opacity:1;pointer-events:auto}
+  body.scan .dock .hint{margin:0 0 10px;font-size:11px;font-weight:700;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  body.scan .dock .row{display:flex;width:auto;gap:0;padding:4px;border-radius:999px;
+    background:rgba(255,255,255,.74);border:1px solid var(--line);
+    box-shadow:0 12px 34px -16px rgba(42,42,42,.5);backdrop-filter:blur(14px)}
+  .act{border:0;background:none;cursor:pointer;padding:12px 30px;border-radius:999px;
+    font:inherit;font-size:14px;font-weight:700;letter-spacing:.04em;color:var(--red);
+    transition:background-color .2s ease}
+  .act:active{background:rgba(42,42,42,.06)}
+
+  /* save sheet */
+  .sheet[hidden]{display:none!important}
+  .sheet{position:fixed;inset:0;z-index:6;display:grid;align-items:end}
+  .sheetbg{position:absolute;inset:0;background:rgba(20,18,16,.38);
+    backdrop-filter:blur(3px);opacity:0;transition:opacity .28s ease}
+  .sheetcard{position:relative;margin:0 auto;width:min(100%,420px);
+    background:rgba(255,255,255,.92);backdrop-filter:blur(18px);
+    border:1px solid var(--line);border-bottom:0;border-radius:22px 22px 0 0;
+    padding:18px 16px calc(14px + env(safe-area-inset-bottom));
+    transform:translateY(100%);transition:transform .38s cubic-bezier(.22,1.08,.36,1)}
+  .sheet.open .sheetbg{opacity:1}
+  .sheet.open .sheetcard{transform:none}
+  .sheettitle{margin:0 0 14px;text-align:center;font-size:11px;font-weight:700;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .sheetopt{display:block;width:100%;border:0;background:none;font:inherit;font-size:16px;
+    font-weight:700;color:var(--text);padding:15px 8px;cursor:pointer;border-radius:12px;
+    transition:background-color .2s ease}
+  .sheetopt + .sheetopt{box-shadow:inset 0 1px 0 var(--line)}
+  .sheetopt.primary{color:var(--red)}
+  .sheetopt.cancel{color:var(--muted);font-weight:600;margin-top:6px;box-shadow:none}
+  .sheetopt:active{background:rgba(42,42,42,.06)}
+  @media (prefers-reduced-motion:reduce){
+    .sheetbg,.sheetcard{transition:none}
+  }
+
+  /* a tap collapses the delays rather than cutting the motion dead */
+  body.scan.fast .rotor{animation-duration:.32s;animation-delay:0s}
+  body.scan.fast .vfbox{animation-duration:.2s}
+  body.scan.fast .card .logo,body.scan.fast .card .name,body.scan.fast .card .title,
+  body.scan.fast .card .contact div{animation-delay:0s;animation-duration:.24s}
+
+  @media (prefers-reduced-motion:reduce){
+    body.scan .fx{background-color:var(--bg)}
+    body.scan .vf{display:none}
+    body.scan .rotor,body.scan.s-reveal .rotor,body.scan.s-reveal .card .logo,
+    body.scan.s-reveal .card .name,body.scan.s-reveal .card .title,
+    body.scan.s-reveal .card .contact div{animation:none;opacity:1}
+    body.scan .card{transition:none}
+    .sh i{animation:none}
+    body.scan .dock,.turn{transition:none}
   }
   .toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);background:var(--text);color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s}
   .toast.show{opacity:1}
@@ -210,16 +363,154 @@ function viewCard(id) {
 function viewPublic(param) {
   let c; try { c = dec(param); } catch { app.innerHTML = `<div class="empty"><b>This link is broken</b>Ask the card owner to share it again.</div>`; return; }
   setHeader(COMPANY.name);
-  app.innerHTML = renderCard(c, location.href) + `
-    <div class="dock"><button class="btn ghost" id="img">Save image</button><button class="btn" id="vcf">Save contact</button></div>`;
-  document.getElementById("img").onclick = () => saveImage(c, location.href);
+  const first = (c.name || "").trim().split(/\s+/)[0] || "this";
+  const vfq = qrcode(0, "M"); vfq.addData(location.href); vfq.make();
+  const B = document.body;
+  B.className = "scan";
+  app.innerHTML = `
+    <div class="fx" aria-hidden="true">
+      <span class="sh s1" data-p=".06"><i></i></span><span class="sh s2" data-p=".13"><i></i></span>
+      <span class="sh s3" data-p=".09"><i></i></span><span class="sh s4" data-p=".17"><i></i></span>
+      <span class="sh s5" data-p=".21"><i></i></span>
+    </div>
+    <div class="vf" aria-hidden="true">
+      <div class="vfbox">
+        <span class="c tl"></span><span class="c tr"></span><span class="c bl"></span><span class="c br"></span>
+        <div class="vfqr">${vfq.createSvgTag({ cellSize: 4, margin: 0, scalable: true })}</div>
+        <div class="laser"></div>
+      </div>
+      <p class="vftext"><span class="t1">Scanning</span><span class="t2">Card received</span></p>
+    </div>` + renderCard(c, location.href) + `
+    <div class="dock">
+      <p class="turn">Tap card to rotate</p>
+      <div class="row"><button class="act" id="save">Save card</button></div>
+    </div>
+    <div class="sheet" id="sheet" hidden>
+      <div class="sheetbg"></div>
+      <div class="sheetcard" role="dialog" aria-modal="true" aria-label="Save this card">
+        <p class="sheettitle">Save ${esc(first)}&rsquo;s card</p>
+        <button class="sheetopt primary" id="vcf">Add to contacts</button>
+        <button class="sheetopt" id="img">Save as image</button>
+        <button class="sheetopt cancel" id="cancel">Cancel</button>
+      </div>
+    </div>`;
+
+  /* the card is laid out at a fixed 620px and fitted by transform; calc() cannot divide a
+     length by a length, so the two scales are measured here and re-measured on resize. */
+  const CW = 620, CH = CW * 4 / 7;
+  const dockEl = app.querySelector(".dock");
+  let qrFlight = null;
+  const fit = () => {
+    const vv = window.visualViewport;
+    const w = Math.round(vv ? vv.width : innerWidth);
+    const h = Math.round(vv ? vv.height : innerHeight);
+    // clear the dock on both sides so the card reads as centred, not merely fitted
+    const gap = Math.max(dockEl.offsetHeight, 88) * 2 + 28;
+    B.style.setProperty("--kUp", Math.min((w - 44) / CW, (h - gap) / CH, 1));
+    B.style.setProperty("--kRot", Math.min((h - gap) / CW, (w - 36) / CH, 1.3));
+    if (qrFlight && qrFlight.playState === "running") { qrFlight.finish(); }
+  };
+  fit();
+  addEventListener("resize", fit);
+  addEventListener("orientationchange", fit);
+  if (window.visualViewport) visualViewport.addEventListener("resize", fit);
+
+  const sheet = document.getElementById("sheet");
+  const closeSheet = () => { sheet.classList.remove("open"); setTimeout(() => { sheet.hidden = true; }, 300); };
+  const openSheet = () => { sheet.hidden = false; requestAnimationFrame(() => sheet.classList.add("open")); };
+  document.getElementById("save").onclick = openSheet;
+  document.getElementById("cancel").onclick = closeSheet;
+  sheet.querySelector(".sheetbg").onclick = closeSheet;
+  document.getElementById("img").onclick = () => { closeSheet(); saveImage(c, location.href); };
   document.getElementById("vcf").onclick = () => {
+    closeSheet();
     const blob = new Blob([vcard(c)], { type: "text/vcard" });
     const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(blob), download: c.name.replace(/\s+/g,"_") + ".vcf" });
     a.click();
+    toast("Contact saved");
+  };
+  const onKey = (e) => { if (e.key === "Escape" && !sheet.hidden) closeSheet(); };
+  addEventListener("keydown", onKey);
+
+  /* Hand the scanned code over to the card: measure where the card's QR actually sits
+     (it is scaled by --kUp, so only a live rect is trustworthy) and fly the viewfinder
+     tile onto it. Scaling is about the tile's centre, and its padding is symmetric, so the
+     inner svg's centre is the tile's centre and one translate+scale lines both up. */
+  const landQr = () => { B.classList.add("qr-landed"); };
+  const flyQr = () => {
+    const tile = app.querySelector(".vfqr");
+    const cardEl = app.querySelector(".card");
+    const qrEl = app.querySelector(".card .qr");
+    const stage = app.querySelector(".stage");
+    if (!tile || !qrEl || !stage) return landQr();
+    const from = tile.getBoundingClientRect();
+    const fromSvg = tile.querySelector("svg").getBoundingClientRect();
+    // Work out where the card's QR will END UP rather than reading a live rect: the card is
+    // still turning in, so its rect is foreshortened. .stage is fixed to the viewport and the
+    // card is centred in it at scale(--kUp), so the resting slot follows from layout offsets.
+    const k0 = parseFloat(getComputedStyle(B).getPropertyValue("--kUp"));
+    const sr = stage.getBoundingClientRect();
+    const qw = parseFloat(getComputedStyle(qrEl).width), qh = parseFloat(getComputedStyle(qrEl).height);
+    const cw = parseFloat(getComputedStyle(cardEl).width), chh = parseFloat(getComputedStyle(cardEl).height);
+    if (!fromSvg.width || !qw || !k0) return landQr();
+    const toW = qw * k0;
+    const toCx = sr.left + sr.width / 2 + (qrEl.offsetLeft + qw / 2 - cw / 2) * k0;
+    const toCy = sr.top + sr.height / 2 + (qrEl.offsetTop + qh / 2 - chh / 2) * k0;
+    // The tile sits inside .vfbox, which is scaled on lock, and a child's translate and
+    // transform-origin are in that scaled space -- so convert screen px to local px.
+    // Scale is exempt: it multiplies the already-scaled on-screen width.
+    const ps = (from.width / tile.offsetWidth) || 1;
+    tile.style.transformOrigin =
+      `${(fromSvg.left + fromSvg.width / 2 - from.left) / ps}px ${(fromSvg.top + fromSvg.height / 2 - from.top) / ps}px`;
+    const k = toW / fromSvg.width;
+    const dx = (toCx - (fromSvg.left + fromSvg.width / 2)) / ps;
+    const dy = (toCy - (fromSvg.top + fromSvg.height / 2)) / ps;
+    qrFlight = tile.animate([
+      { transform: "translate(0px,0px) scale(1)", backgroundColor: "rgba(255,255,255,1)", borderRadius: "8px" },
+      { transform: `translate(${dx}px,${dy}px) scale(${k})`, backgroundColor: "rgba(255,255,255,0)", borderRadius: "2px" },
+    ], { duration: 700, easing: "cubic-bezier(.5,.02,.25,1)", fill: "forwards" });
+    qrFlight.finished.then(landQr, () => {});
+  };
+
+  /* black -> viewfinder -> lock -> card -> save. A tap skips ahead; once the card has
+     landed the same tap flips it between upright and full-bleed. */
+  const phase = (cls) => B.classList.add(cls);
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (still) {
+    B.classList.add("s-scan", "s-lock", "s-reveal", "ready", "qr-landed");
+  } else {
+    scanTimers = [
+      setTimeout(() => phase("s-scan"), 120),
+      setTimeout(() => phase("s-lock"), 1450),
+      setTimeout(() => phase("s-reveal"), 1850),
+      setTimeout(flyQr, 2000),   // flies while the card is still turning in
+      setTimeout(() => phase("ready"), 3300),
+    ];
+  }
+  const onTap = (e) => {
+    if (e.target.closest(".dock, .sheet")) return;
+    if (!B.classList.contains("ready")) {
+      scanTimers.forEach(clearTimeout); scanTimers = [];
+      if (qrFlight) { qrFlight.finish(); } else { landQr(); }
+      B.classList.add("fast", "s-scan", "s-lock", "s-reveal", "ready");
+      return;
+    }
+    if (!sheet.hidden) return;
+    B.classList.toggle("rotated");
+  };
+  // bound late so the tap that opened the link cannot skip the intro it just triggered
+  scanTimers.push(setTimeout(() => addEventListener("pointerdown", onTap), 500));
+
+  scanCleanup = () => {
+    if (qrFlight) { qrFlight.cancel(); qrFlight = null; }
+    const t = app.querySelector(".vfqr"); if (t) t.style.transformOrigin = "";
+    removeEventListener("pointerdown", onTap);
+    removeEventListener("resize", fit); removeEventListener("orientationchange", fit);
+    if (window.visualViewport) visualViewport.removeEventListener("resize", fit);
+    removeEventListener("keydown", onKey);
+    B.style.removeProperty("--kUp"); B.style.removeProperty("--kRot");
   };
 }
-
 
 /* ---------- render card to PNG (mirrors the CSS layout) ---------- */
 async function cardToPng(c, qrText) {
@@ -282,8 +573,16 @@ async function saveImage(c, qrText) {
 }
 
 /* ---------- router ---------- */
+let scanTimers = [], scanCleanup = null;
+function clearScan() {
+  scanTimers.forEach(clearTimeout); scanTimers = [];
+  if (scanCleanup) { scanCleanup(); scanCleanup = null; }
+}
 function route() {
   const h = location.hash.slice(1) || "/";
+  clearScan();
+  document.body.className = "chrome";
+  document.documentElement.classList.remove("boot-scan");
   let m;
   if (h === "/") viewList();
   else if (h === "/new") viewEdit();
